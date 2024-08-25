@@ -1,4 +1,9 @@
+use std::num::NonZero;
+
 use crate::handshake::{RTMP_PROTOCOL_VERSION, RANDOM_ECHO_SIZE};
+use crate::nom_utils::RTMPResult;
+use nom::number::complete::{be_u8, be_u32};
+use nom::bytes::complete::take;
 
 // C0 and S0 Packet (1 byte)
 #[derive(Debug, Clone, Copy)]
@@ -16,9 +21,40 @@ pub struct Version {
     pub version: u8,
 }
 
-// C1 and S1 Packet (1536 bytes)
+impl Default for Version {
+    fn default() -> Self {
+        Version {
+            version: RTMP_PROTOCOL_VERSION,
+        }
+    }
+}
+
+impl Version {
+    pub fn new(version: u8) -> Self {
+        Version { version }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.version == RTMP_PROTOCOL_VERSION
+    }
+
+    pub fn to_bytes(&self) -> [u8; 1] {
+        [self.version]
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> RTMPResult<'_, Self> {
+        if bytes.len() < 1 {
+            return Err(nom::Err::Incomplete(nom::Needed::Size(NonZero::new(1).unwrap())));
+        }
+
+        let (i, version) = be_u8(bytes)?;
+        Ok((i, Version { version }))
+    }
+}
+
+// C1 Packet (1536 bytes)
 #[derive(Debug, Clone, Copy)]
-pub struct C1S1Packet {
+pub struct C1Packet {
     /// This field contains a timestamp, which SHOULD be
     /// used as the epoch for all future chunks sent from this endpoint.
     /// This may be 0, or some arbitrary value. To synchronize multiple
@@ -35,7 +71,91 @@ pub struct C1S1Packet {
     /// initiated by its peer, this data SHOULD send something sufficiently
     /// random. But there is no need for cryptographically-secure
     /// randomness, or even dynamic values.
-    pub random_data: [u8; 1528],
+    pub random_data: [u8; RANDOM_ECHO_SIZE],
+}
+
+
+impl Default for C1Packet {
+    fn default() -> Self {
+        C1Packet {
+            time: 0,
+            zero: 0,
+            random_data: [0; RANDOM_ECHO_SIZE],
+        }
+    }
+}
+
+impl C1Packet {
+    pub fn new(time: u32, random_data: [u8; RANDOM_ECHO_SIZE]) -> Self {
+        C1Packet {
+            time,
+            zero: 0,
+            random_data,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(1536);
+        bytes.extend_from_slice(&self.time.to_be_bytes());
+        bytes.extend_from_slice(&self.zero.to_be_bytes());
+        bytes.extend_from_slice(&self.random_data);
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> RTMPResult<'_, Self> {
+        if bytes.len() < 1536 {
+            return Err(nom::Err::Incomplete(nom::Needed::Size(NonZero::new(1536).unwrap())));
+        }
+
+        let (i, time) = be_u32(bytes)?;
+        let (i, zero) = be_u32(i)?;
+        let (i, random_data) = take(RANDOM_ECHO_SIZE)(i)?;
+
+        Ok((i, C1Packet { time, zero, random_data: random_data.try_into().unwrap() }))
+    }
+}
+
+// S1 Packet (1536 bytes)
+// Sadly, Adobe Media Server (AMS) does not follow the protocol specification, so
+// this is 'figured out' by reverse engineering the packets.
+#[derive(Debug, Clone)]
+pub struct S1Packet {
+    /// This field contains server uptime in milliseconds.
+    pub server_uptime: u32,
+
+    /// This field contains the FMS/AMS version as a string.
+    pub server_version: String,
+
+    /// This field contains random data.
+    pub random_echo: [u8; RANDOM_ECHO_SIZE],
+}
+
+impl Default for S1Packet {
+    fn default() -> Self {
+        S1Packet {
+            server_uptime: 0,
+            server_version: String::new(),
+            random_echo: [0; RANDOM_ECHO_SIZE],
+        }
+    }
+}
+
+impl S1Packet {
+    pub fn from_bytes(bytes: &[u8]) -> RTMPResult<'_, Self> {
+        if bytes.len() < 1536 {
+            return Err(nom::Err::Incomplete(nom::Needed::Size(NonZero::new(1536).unwrap())));
+        }
+
+        let (i, server_uptime) = be_u32(bytes)?;
+        let (i, server_version) = take(4usize)(i)?;
+        let (i, random_data) = take(RANDOM_ECHO_SIZE)(i)?;
+
+        Ok((i, S1Packet {
+            server_uptime,
+            server_version: format!("{:?}.{:?}.{:?}.{:?}", server_version[0], server_version[1], server_version[2], server_version[3]).to_string(),
+            random_echo: random_data.try_into().unwrap(),
+        }))
+    }
 }
 
 // C2 and S2 Packet (1536 bytes)
@@ -52,22 +172,93 @@ pub struct C2S2Packet {
     /// can use the time and time2 fields together with the current
     /// timestamp as a quick estimate of the bandwidth and/or latency of
     /// the connection, but this is unlikely to be useful.
-    pub random_echo: [u8; 1528],
+    pub random_echo: [u8; RANDOM_ECHO_SIZE],
+}
+
+impl Default for C2S2Packet {
+    fn default() -> Self {
+        C2S2Packet {
+            time: 0,
+            time2: 0,
+            random_echo: [0; RANDOM_ECHO_SIZE],
+        }
+    }
+}
+
+impl C2S2Packet {
+    pub fn new(time: u32, time2: u32, random_echo: [u8; RANDOM_ECHO_SIZE]) -> Self {
+        C2S2Packet {
+            time,
+            time2,
+            random_echo,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(1536);
+        bytes.extend_from_slice(&self.time.to_be_bytes());
+        bytes.extend_from_slice(&self.time2.to_be_bytes());
+        bytes.extend_from_slice(&self.random_echo);
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> RTMPResult<'_, Self> {
+        if bytes.len() < 1536 {
+            return Err(nom::Err::Incomplete(nom::Needed::Size(NonZero::new(1536).unwrap())));
+        }
+
+        let (i, time) = be_u32(bytes)?;
+        let (i, time2) = be_u32(i)?;
+        let (i, random_data) = take(RANDOM_ECHO_SIZE)(i)?;
+
+        Ok((i, C2S2Packet { time, time2, random_echo: random_data.try_into().unwrap() }))
+    }
 }
 
 // Combined C0 and C1 Packet (Client -> Server)
 #[derive(Debug, Clone, Copy)]
 pub struct ClientHello {
     pub c0: Version,
-    pub c1: C1S1Packet,
+    pub c1: C1Packet,
+}
+
+impl ClientHello {
+    pub fn new(version: u8, time: u32, random_data: [u8; RANDOM_ECHO_SIZE]) -> Self {
+        ClientHello {
+            c0: Version::new(version),
+            c1: C1Packet::new(time, random_data),
+        }
+    }
+
+    // No need to implement `from_bytes` for this struct
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(1 + 1536);
+        bytes.extend_from_slice(&self.c0.to_bytes());
+        bytes.extend_from_slice(&self.c1.to_bytes());
+        bytes
+    }
 }
 
 // Combined S0, S1, and S2 Packet (Server -> Client)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ServerHelloAck {
     pub s0: Version,
-    pub s1: C1S1Packet,
+    pub s1: S1Packet,
     pub s2: C2S2Packet,
+}
+
+impl ServerHelloAck {
+    pub fn from_bytes(bytes: &[u8]) -> RTMPResult<'_, Self> {
+        if bytes.len() < 1 + 1536 + 1536 {
+            return Err(nom::Err::Incomplete(nom::Needed::Size(NonZero::new(3073).unwrap())));
+        }
+
+        let (i, s0) = Version::from_bytes(bytes)?;
+        let (i, s1) = S1Packet::from_bytes(i)?;
+        let (i, s2) = C2S2Packet::from_bytes(i)?;
+
+        Ok((i, ServerHelloAck { s0, s1, s2 }))
+    }
 }
 
 // Combined C2 Packet and AMF Connect Command (Client -> Server)
@@ -76,4 +267,20 @@ pub struct ClientAckAndConnect {
     pub c2: C2S2Packet,
     // TODO: Add AMF connect command
     // pub amf_connect_command: Vec<u8>, // Placeholder for AMF connect command, typically a Vec<u8>
+}
+
+impl ClientAckAndConnect {
+    pub fn new(c2: C2S2Packet) -> Self {
+        ClientAckAndConnect {
+            c2,
+            // amf_connect_command: Vec::new(),
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(1536);
+        bytes.extend_from_slice(&self.c2.to_bytes());
+        // bytes.extend_from_slice(&self.amf_connect_command);
+        bytes
+    }
 }

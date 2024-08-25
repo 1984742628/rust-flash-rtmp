@@ -1,22 +1,22 @@
-use std::io;
-use nom;
+use thiserror::Error;
 
+// Allow the Nom variant to be large
+#[allow(variant_size_differences)]
+
+#[derive(Error, Debug, Clone, Eq, PartialEq)]
 pub enum HandshakeError {
-    NomError(nom::Err<nom::error::ErrorKind>),
-    IoError(io::Error),
+    #[error("No data provided")]
+    NoData,
+
+    #[error("Version mismatch: {0}")]
     VersionError(u8),
-    EchoMismatch,
+
+    #[error("Random Echo mismatch")]
+    EchoMismatch {
+        expected: [u8; 1528],
+        got: [u8; 1528],
+    },
+
+    #[error("Handshake has already been done")]
     HandshakeAlreadyDone,
-}
-
-impl From<nom::Err<nom::error::ErrorKind>> for HandshakeError {
-    fn from(err: nom::Err<nom::error::ErrorKind>) -> Self {
-        HandshakeError::NomError(err)
-    }
-}
-
-impl From<io::Error> for HandshakeError {
-    fn from(err: io::Error) -> Self {
-        HandshakeError::IoError(err)
-    }
 }
