@@ -52,9 +52,9 @@ impl Version {
     }
 }
 
-// C1 Packet (1536 bytes)
+// C1S1 Packet (1536 bytes)
 #[derive(Debug, Clone, Copy)]
-pub struct C1Packet {
+pub struct C1S1Packet {
     /// This field contains a timestamp, which SHOULD be
     /// used as the epoch for all future chunks sent from this endpoint.
     /// This may be 0, or some arbitrary value. To synchronize multiple
@@ -62,8 +62,9 @@ pub struct C1Packet {
     /// the other chunkstream’s timestamp.
     pub time: u32,
 
-    /// This field MUST be all 0s.
-    pub zero: u32,
+    /// Original RTMP Documentation: This field MUST be all 0s.
+    /// Since FP 9: Should contain the Client/Server version
+    pub version: [u8; 4],
 
     /// This field can contain any arbitrary
     /// values. Since each endpoint has to distinguish between the
@@ -75,21 +76,21 @@ pub struct C1Packet {
 }
 
 
-impl Default for C1Packet {
+impl Default for C1S1Packet {
     fn default() -> Self {
-        C1Packet {
+        C1S1Packet {
             time: 0,
-            zero: 0,
+            version: [0, 0, 0, 0],
             random_data: [0; RANDOM_ECHO_SIZE],
         }
     }
 }
 
-impl C1Packet {
+impl C1S1Packet {
     pub fn new(time: u32, random_data: [u8; RANDOM_ECHO_SIZE]) -> Self {
-        C1Packet {
+        C1S1Packet {
             time,
-            zero: 0,
+            version: [0, 0, 0, 0],
             random_data,
         }
     }
@@ -97,7 +98,7 @@ impl C1Packet {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(1536);
         bytes.extend_from_slice(&self.time.to_be_bytes());
-        bytes.extend_from_slice(&self.zero.to_be_bytes());
+        bytes.extend_from_slice(&self.version);
         bytes.extend_from_slice(&self.random_data);
         bytes
     }
@@ -108,53 +109,10 @@ impl C1Packet {
         }
 
         let (i, time) = be_u32(bytes)?;
-        let (i, zero) = be_u32(i)?;
+        let (i, version) = take(4usize)(i)?;
         let (i, random_data) = take(RANDOM_ECHO_SIZE)(i)?;
 
-        Ok((i, C1Packet { time, zero, random_data: random_data.try_into().unwrap() }))
-    }
-}
-
-// S1 Packet (1536 bytes)
-// Sadly, Adobe Media Server (AMS) does not follow the protocol specification, so
-// this is 'figured out' by reverse engineering the packets.
-#[derive(Debug, Clone)]
-pub struct S1Packet {
-    /// This field contains server uptime in milliseconds.
-    pub server_uptime: u32,
-
-    /// This field contains the FMS/AMS version as a string.
-    pub server_version: String,
-
-    /// This field contains random data.
-    pub random_echo: [u8; RANDOM_ECHO_SIZE],
-}
-
-impl Default for S1Packet {
-    fn default() -> Self {
-        S1Packet {
-            server_uptime: 0,
-            server_version: String::new(),
-            random_echo: [0; RANDOM_ECHO_SIZE],
-        }
-    }
-}
-
-impl S1Packet {
-    pub fn from_bytes(bytes: &[u8]) -> RTMPResult<'_, Self> {
-        if bytes.len() < 1536 {
-            return Err(nom::Err::Incomplete(nom::Needed::Size(NonZero::new(1536).unwrap())));
-        }
-
-        let (i, server_uptime) = be_u32(bytes)?;
-        let (i, server_version) = take(4usize)(i)?;
-        let (i, random_data) = take(RANDOM_ECHO_SIZE)(i)?;
-
-        Ok((i, S1Packet {
-            server_uptime,
-            server_version: format!("{:?}.{:?}.{:?}.{:?}", server_version[0], server_version[1], server_version[2], server_version[3]).to_string(),
-            random_echo: random_data.try_into().unwrap(),
-        }))
+        Ok((i, C1S1Packet { time, version: version.try_into().unwrap(), random_data: random_data.try_into().unwrap() }))
     }
 }
 
@@ -219,14 +177,14 @@ impl C2S2Packet {
 #[derive(Debug, Clone, Copy)]
 pub struct ClientHello {
     pub c0: Version,
-    pub c1: C1Packet,
+    pub c1: C1S1Packet,
 }
 
 impl ClientHello {
     pub fn new(version: u8, time: u32, random_data: [u8; RANDOM_ECHO_SIZE]) -> Self {
         ClientHello {
             c0: Version::new(version),
-            c1: C1Packet::new(time, random_data),
+            c1: C1S1Packet::new(time, random_data),
         }
     }
 
@@ -243,7 +201,7 @@ impl ClientHello {
 #[derive(Debug, Clone)]
 pub struct ServerHelloAck {
     pub s0: Version,
-    pub s1: S1Packet,
+    pub s1: C1S1Packet,
     pub s2: C2S2Packet,
 }
 
@@ -254,7 +212,7 @@ impl ServerHelloAck {
         }
 
         let (i, s0) = Version::from_bytes(bytes)?;
-        let (i, s1) = S1Packet::from_bytes(i)?;
+        let (i, s1) = C1S1Packet::from_bytes(i)?;
         let (i, s2) = C2S2Packet::from_bytes(i)?;
 
         Ok((i, ServerHelloAck { s0, s1, s2 }))
