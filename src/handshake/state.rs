@@ -8,12 +8,7 @@ pub enum HandshakeState {
 }
 
 #[derive(Debug, Clone)]
-pub enum HandshakeResult {
-    InProgress {
-        response: Vec<u8>
-    },
-
-    Done {
-        response: Vec<u8>
-    }
+pub struct HandshakeResult {
+    pub response: Vec<u8>,
+    pub is_done: bool
 }

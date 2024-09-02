@@ -10,13 +10,13 @@ pub use packets::*;
 pub use errors::HandshakeError;
 
 #[derive(Debug)]
-pub struct RTMPHandshakeNegiotator {
+pub struct RTMPHandshakeNegotiator {
     state: HandshakeState,
 }
 
-impl RTMPHandshakeNegiotator {
+impl RTMPHandshakeNegotiator {
     pub fn new() -> Self {
-        RTMPHandshakeNegiotator {
+        RTMPHandshakeNegotiator {
             state: HandshakeState::Uninitialized,
         }
     }
@@ -34,8 +34,9 @@ impl RTMPHandshakeNegiotator {
 
         self.state = HandshakeState::ClientHelloSent;
 
-        HandshakeResult::InProgress {
-            response: client_hello.to_bytes()
+        HandshakeResult {
+            response: client_hello.to_bytes(),
+            is_done: false
         }
     }
 
@@ -53,8 +54,9 @@ impl RTMPHandshakeNegiotator {
 
         self.state = HandshakeState::HandshakeDone;
 
-        Ok(HandshakeResult::Done {
-            response: client_ack_and_connect.to_bytes()
+        Ok(HandshakeResult {
+            response: client_ack_and_connect.to_bytes(),
+            is_done: true
         })
 
     }

@@ -1,29 +1,6 @@
-// Enum for the Chunk Type (fmt)
-#[derive(Debug, Clone, Copy)]
-pub enum ChunkType {
-    Type0, // 11 bytes
-    Type1, // 7 bytes
-    Type2, // 3 bytes
-    Type3, // No header
-}
-
-// Struct for the Chunk Basic Header
-#[derive(Debug)]
-pub struct ChunkBasicHeader {
-    pub chunk_type: ChunkType,
-    pub stream_id: u32, // The chunk stream ID
-}
-
-// Enum for the Chunk Stream ID encoding
-#[derive(Debug)]
-pub enum ChunkStreamIdEncoding {
-    OneByte(u8), // For IDs 2-63
-    TwoBytes(u8), // For IDs 64-319
-    ThreeBytes(u16), // For IDs 320-65599
-}
 
 // Enum for the Message Type ID
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum MessageTypeId {
     /// Protocol control message 1, Set Chunk Size, is used to notify the
     /// peer of a new maximum chunk size.
@@ -106,13 +83,42 @@ pub enum MessageTypeId {
 
 }
 
-// Struct for the Chunk Message Header
+/// Represents the basic header of an RTMP chunk, encoding the chunk stream ID and chunk type (format).
 #[derive(Debug)]
-pub struct ChunkMessageHeader {
-    pub timestamp: Option<u32>,
-    pub timestamp_delta: Option<u32>,
-    pub message_length: Option<u32>,
-    pub message_type_id: Option<MessageTypeId>,
-    pub message_stream_id: Option<u32>,
+pub struct ChunkBasicHeader {
+    pub chunk_header_format: u8,
+    pub chunk_stream_id: u32,     // Variable length, up to 24 bits, renamed from 'cs_id'
 }
 
+/// Represents the different types of message headers in RTMP chunks.
+#[derive(Debug)]
+pub enum ChunkMessageHeader {
+    Type0 {
+        absolute_timestamp: u32, // can be extended
+        message_length: u32,
+        message_type_id: MessageTypeId,
+        message_stream_id: u32,       // 4 bytes, little-endian
+    },
+    Type1 {
+        timestamp_delta: u32, // can be extended
+        message_length: u32,
+        message_type_id: MessageTypeId,
+    },
+    Type2 {
+        timestamp_delta: u32, // can be extended
+    },
+    Type3, // No fields, takes values from the preceding chunk
+}
+
+/// Represents the Extended Timestamp used in RTMP chunks.
+#[derive(Debug)]
+pub struct ExtendedTimestamp(pub u32);
+
+/// Represents an RTMP chunk, containing a header and data.
+#[derive(Debug)]
+pub struct RTMPChunk {
+    pub basic_header: ChunkBasicHeader,
+    pub message_header: ChunkMessageHeader,
+    pub extended_timestamp: Option<ExtendedTimestamp>, // Optional, depends on the header
+    pub data: Vec<u8>, // The chunk payload
+}
