@@ -1,7 +1,7 @@
 use std::num::NonZero;
 
 use crate::handshake::{RTMP_PROTOCOL_VERSION, RANDOM_ECHO_SIZE};
-use crate::nom_utils::RTMPResult;
+use crate::utils::nom::RTMPResult;
 use nom::number::complete::{be_u8, be_u32};
 use nom::bytes::complete::take;
 

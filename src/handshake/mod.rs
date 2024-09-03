@@ -73,7 +73,7 @@ impl RTMPHandshakeNegotiator {
 
     fn create_client_ack_and_connect(&self, s1: C1S1Packet) -> ClientAckAndConnect {
         ClientAckAndConnect::new(C2S2Packet {
-            time: 0,
+            time: s1.time,
             time2: 0,
             random_echo: s1.random_data,
         })

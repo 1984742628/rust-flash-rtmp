@@ -16,7 +16,7 @@
 )]
 
 
-pub(crate) mod nom_utils;
+pub(crate) mod utils;
 mod errors;
 pub(crate) mod handshake;
 pub(crate) mod chunk;

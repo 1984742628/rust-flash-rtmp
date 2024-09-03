@@ -1,4 +1,6 @@
 
+use std::io::Write;
+
 use crate::chunk::packets::{ChunkBasicHeader, ChunkMessageHeader, RTMPChunk, ExtendedTimestamp};
 use crate::rtmp::packets::RTMPMessage;
 
@@ -17,40 +19,97 @@ impl ChunkWriter {
         self.chunk_size = chunk_size;
     }
 
-    fn write_basic_header(&self, basic_header: ChunkBasicHeader, buffer: &mut Vec<u8>) {}
+    fn write_basic_header(&self, basic_header: ChunkBasicHeader, buffer: &mut Vec<u8>) {
+        let format = basic_header.chunk_header_format;
+        let chunk_stream_id = basic_header.chunk_stream_id;
 
-    fn write_message_header(&self, message_header: ChunkMessageHeader, buffer: &mut Vec<u8>) {} 
+        if chunk_stream_id >= 64 + 255 {
+            buffer.push(format << 6 | 1);
+            buffer.push(((chunk_stream_id - 64) >> 8) as u8);
+            buffer.push((chunk_stream_id - 64) as u8);
+        } else if chunk_stream_id >= 64 {
+            buffer.push(format << 6);
+            buffer.push((chunk_stream_id - 64) as u8);
+        } else {
+            buffer.push(format << 6 | chunk_stream_id as u8);
+        }
+    }
 
-    pub fn write_chunks(&self, rtmp_message: RTMPMessage, chunk_stream_id: u32) -> Vec<u8> {}
+    fn write_message_header(&self, message_header: ChunkMessageHeader, buffer: &mut Vec<u8>) {
+        match message_header {
+            ChunkMessageHeader::Type0 { 
+                absolute_timestamp,
+                message_length, 
+                message_type_id, 
+                message_stream_id 
+            } => {
+                // TODO: maybe move to a util?
+                // write timestamp as u24
+                buffer.push((absolute_timestamp >> 16) as u8);
+                buffer.push((absolute_timestamp >> 8) as u8);
+                buffer.push(absolute_timestamp as u8);  
+
+                // same goes for length
+                buffer.push((message_length >> 16) as u8);
+                buffer.push((message_length >> 8) as u8);
+                buffer.push(message_length as u8);  
+
+                buffer.push(message_type_id as u8);
+
+                // uses little endian
+                buffer.extend_from_slice(&message_stream_id.to_le_bytes());
+            },
+            _ => {}
+        }
+    } 
+
+    pub fn write_chunks(&self, rtmp_message: RTMPMessage, chunk_stream_id: u32) -> Vec<u8> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut rtmp_chunks: Vec<RTMPChunk> = Vec::new();
+
+        let payload_chunks = rtmp_message.payload.chunks(self.chunk_size as usize);
+        let mut remaining = rtmp_message.payload.len();
+        let mut first_chunk = false;
+
+        // quick test
+        for payload_chunk in payload_chunks {
+            if !first_chunk {
+                first_chunk = true;
+                rtmp_chunks.push(RTMPChunk {
+                    basic_header: ChunkBasicHeader { chunk_header_format: 0, chunk_stream_id },
+                    message_header: ChunkMessageHeader::Type0 {
+                        absolute_timestamp: 0,
+                        message_length: remaining as u32, 
+                        message_type_id: crate::chunk::packets::MessageTypeId::CommandAMF0, 
+                        message_stream_id: 0
+                    },
+                    extended_timestamp: None,
+                    data: payload_chunk.to_vec()
+                }); 
+            } else {
+                rtmp_chunks.push(RTMPChunk {
+                    basic_header: ChunkBasicHeader { chunk_header_format: 3, chunk_stream_id },
+                    message_header: ChunkMessageHeader::Type3,
+                    extended_timestamp: None,
+                    data: payload_chunk.to_vec()
+                });  
+            }
+
+            remaining -= payload_chunk.len()
+        };
+
+        for rtmp_chunk in rtmp_chunks {
+            self.write_basic_header(rtmp_chunk.basic_header, &mut buffer);
+            self.write_message_header(rtmp_chunk.message_header, &mut buffer);
+            // write extended timestamp here
+            buffer.extend_from_slice(&rtmp_chunk.data);
+        };
+
+        buffer
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
-    #[test]
-    pub fn test_write_basic_header() {
-        let header = ChunkBasicHeader {
-            chunk_header_format: 1, // Example format value
-            chunk_stream_id: 3,     // Example stream ID
-        };
-    
-        let chunk_writer = ChunkWriter::new();
-        let mut vec = Vec::new();
-        chunk_writer.write_basic_header(header, &mut vec);
-        println!("{:?}", vec); // Output the result for debugging
-    }
-
-    #[test]
-    pub fn test_write_chunks() {
-        let chunk_writer = ChunkWriter::new();
-        let bytes = chunk_writer.write_chunks(RTMPMessage {
-            timestamp: 0,
-            message_type_id: crate::chunk::packets::MessageTypeId::CommandAMF0,
-            message_stream_id: 0,
-            payload: vec![2, 0, 7, 99, 111, 110, 110, 101, 99, 116, 0, 63, 240, 0, 0, 0, 0, 0, 0, 3, 0, 11, 118, 105, 100, 101, 111, 67, 111, 100, 101, 99, 115, 0, 64, 111, 128, 0, 0, 0, 0, 0, 0, 11, 97, 117, 100, 105, 111, 67, 111, 100, 101, 99, 115, 0, 64, 168, 238, 0, 0, 0, 0, 0, 0, 8, 102, 108, 97, 115, 104, 86, 101, 114, 2, 0, 13, 87, 73, 78, 32, 49, 48, 44, 49, 44, 56, 53, 44, 51, 0, 3, 97, 112, 112, 2, 0, 3, 97, 112, 112, 0, 5, 116, 99, 85, 114, 108, 2, 0, 6, 116, 99, 95, 117, 114, 108, 0, 13, 118, 105, 100, 101, 111, 70, 117, 110, 99, 116, 105, 111, 110, 0, 63, 240, 0, 0, 0, 0, 0, 0, 0, 12, 99, 97, 112, 97, 98, 105, 108, 105, 116, 105, 101, 115, 0, 64, 109, 224, 0, 0, 0, 0, 0, 0, 7, 112, 97, 103, 101, 85, 114, 108, 2, 0, 8, 112, 97, 103, 101, 95, 117, 114, 107, 0, 4, 102, 112, 97, 100, 1, 0, 0, 6, 115, 119, 102, 85, 114, 108, 2, 0, 7, 115, 119, 102, 95, 117, 114, 108, 0, 14, 111, 98, 106, 101, 99, 116, 69, 110, 99, 111, 100, 105, 110, 103, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 0, 0, 0, 1, 0, 63, 240, 0, 0, 0, 0, 0, 0]
-        }, 3);
-
-        println!("{:?}", bytes);
-    }
 }

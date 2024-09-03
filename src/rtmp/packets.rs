@@ -17,7 +17,7 @@ pub struct AMF0CommandMessage {
     pub command_object: Option<Rc<Value>>,
 
     /// Any optional arguments to be provided 
-    pub optional_arguments: Option<Rc<Value>>
+    pub optional_arguments: Vec<Rc<Value>>
 }
 
 pub enum RTMPMessageType {

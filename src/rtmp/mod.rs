@@ -57,18 +57,18 @@ impl RTMPClient {
                                 Element { name: String::from("videoCodecs"), value: Rc::new(Value::Number(252.0)) },
                                 Element { name: String::from("audioCodecs"), value: Rc::new(Value::Number(3191.0)) },
                                 Element { name: String::from("flashVer"), value: Rc::new(Value::String(String::from("WIN 10,1,85,3"))) },
-                                Element { name: String::from("app"), value: Rc::new(Value::String(String::from("app"))) },
-                                Element { name: String::from("tcUrl"), value: Rc::new(Value::String(String::from("tc_url"))) },
+                                Element { name: String::from("app"), value: Rc::new(Value::String(self.connection_args.app.clone())) },
+                                Element { name: String::from("tcUrl"), value: Rc::new(Value::String(self.connection_args.tc_url.clone())) },
                                 Element { name: String::from("videoFunction"), value: Rc::new(Value::Number(1.0)) },
                                 Element { name: String::from("capabilities"), value: Rc::new(Value::Number(239.0)) },
-                                Element { name: String::from("pageUrl"), value: Rc::new(Value::String(String::from("page_urk"))) },
+                                Element { name: String::from("pageUrl"), value: Rc::new(Value::String(self.connection_args.page_url.clone())) },
                                 Element { name: String::from("fpad"), value: Rc::new(Value::Bool(false)) },
-                                Element { name: String::from("swfUrl"), value: Rc::new(Value::String(String::from("swf_url"))) },
+                                Element { name: String::from("swfUrl"), value: Rc::new(Value::String(self.connection_args.swf_url.clone())) },
                                 Element { name: String::from("objectEncoding"), value: Rc::new(Value::Number(0.0)) },
                             ],
                             None
                         ))),
-                        optional_arguments: None
+                        optional_arguments: vec![Rc::new(Value::Number(1f64))],
                     };
 
                     let res = rtmp_writer.write(RTMPMessageType::AMF0Command(command_message));
