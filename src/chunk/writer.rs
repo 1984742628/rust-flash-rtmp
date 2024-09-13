@@ -2,21 +2,13 @@
 use std::io::Write;
 
 use crate::chunk::packets::{ChunkBasicHeader, ChunkMessageHeader, RTMPChunk, ExtendedTimestamp};
-use crate::rtmp::packets::RTMPMessage;
+// use crate::rtmp::packets::RTMPMessage;
 
-pub struct ChunkWriter {
-    chunk_size: i32
-}
+pub struct ChunkWriter {}
 
 impl ChunkWriter {
     pub fn new() -> ChunkWriter {
-        ChunkWriter {
-            chunk_size: 128
-        }
-    }
-
-    pub fn set_chunk_size(&mut self, chunk_size: i32) {
-        self.chunk_size = chunk_size;
+        ChunkWriter { }
     }
 
     fn write_basic_header(&self, basic_header: ChunkBasicHeader, buffer: &mut Vec<u8>) {
@@ -63,53 +55,13 @@ impl ChunkWriter {
         }
     } 
 
-    pub fn write_chunks(&self, rtmp_message: RTMPMessage, chunk_stream_id: u32) -> Vec<u8> {
-        let mut buffer: Vec<u8> = Vec::new();
-        let mut rtmp_chunks: Vec<RTMPChunk> = Vec::new();
+    // pub fn write_chunks(&self, rtmp_message: RTMPMessage, chunk_stream_id: u32) -> Vec<u8> {
+    //     let mut buffer: Vec<u8> = Vec::new();
+    //     let mut rtmp_chunks: Vec<RTMPChunk> = Vec::new();
 
-        let payload_chunks = rtmp_message.payload.chunks(self.chunk_size as usize);
-        let mut remaining = rtmp_message.payload.len();
-        let mut first_chunk = false;
-
-        // quick test
-        for payload_chunk in payload_chunks {
-            if !first_chunk {
-                first_chunk = true;
-                rtmp_chunks.push(RTMPChunk {
-                    basic_header: ChunkBasicHeader { chunk_header_format: 0, chunk_stream_id },
-                    message_header: ChunkMessageHeader::Type0 {
-                        absolute_timestamp: 0,
-                        message_length: remaining as u32, 
-                        message_type_id: crate::chunk::packets::MessageTypeId::CommandAMF0, 
-                        message_stream_id: 0
-                    },
-                    extended_timestamp: None,
-                    data: payload_chunk.to_vec()
-                }); 
-            } else {
-                rtmp_chunks.push(RTMPChunk {
-                    basic_header: ChunkBasicHeader { chunk_header_format: 3, chunk_stream_id },
-                    message_header: ChunkMessageHeader::Type3,
-                    extended_timestamp: None,
-                    data: payload_chunk.to_vec()
-                });  
-            }
-
-            remaining -= payload_chunk.len()
-        };
-
-        for rtmp_chunk in rtmp_chunks {
-            self.write_basic_header(rtmp_chunk.basic_header, &mut buffer);
-            self.write_message_header(rtmp_chunk.message_header, &mut buffer);
-            // write extended timestamp here
-            buffer.extend_from_slice(&rtmp_chunk.data);
-        };
-
-        buffer
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
+    //     let payload_chunks = rtmp_message.payload.chunks(self.chunk_size as usize);
+    //     let mut remaining = rtmp_message.payload.len();
+    
+    //     vec![]
+    // }
 }
