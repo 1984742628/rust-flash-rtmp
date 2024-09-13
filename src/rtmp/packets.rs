@@ -2,7 +2,7 @@ use flash_lso::types::Value;
 use std::rc::Rc;
 use crate::chunk::packets::MessageTypeId;
 
-pub struct AMF0CommandMessage {
+pub struct CommandMessage {
     /// Name of the remote procedure that is
     /// called.
     pub procedure_name: String,
@@ -21,7 +21,7 @@ pub struct AMF0CommandMessage {
 }
 
 pub enum RTMPMessageType {
-    AMF0Command(AMF0CommandMessage),
+    AMF0Command(CommandMessage),
 }
 
 pub struct RTMPMessage {

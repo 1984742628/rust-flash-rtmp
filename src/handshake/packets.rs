@@ -219,26 +219,22 @@ impl ServerHelloAck {
     }
 }
 
-// Combined C2 Packet and AMF Connect Command (Client -> Server)
+// C2 packet, after this packet a AMF connect command should occur (Client -> Server)
 #[derive(Debug, Clone)]
 pub struct ClientAckAndConnect {
     pub c2: C2S2Packet,
-    // TODO: Add AMF connect command
-    // pub amf_connect_command: Vec<u8>, // Placeholder for AMF connect command, typically a Vec<u8>
 }
 
 impl ClientAckAndConnect {
     pub fn new(c2: C2S2Packet) -> Self {
         ClientAckAndConnect {
             c2,
-            // amf_connect_command: Vec::new(),
         }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(1536);
         bytes.extend_from_slice(&self.c2.to_bytes());
-        // bytes.extend_from_slice(&self.amf_connect_command);
         bytes
     }
 }
